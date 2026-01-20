@@ -35,14 +35,24 @@ python -m pip install --upgrade pip
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### 调试模式（可打断点）
+- 安装调试依赖：`pip install debugpy`（或 `conda install debugpy`）
+- 启动附加调试端口（默认 5678）：
+
+```bash
+python -m debugpy --listen 5678 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+- 在 IDE 中附加到 `localhost:5678`，即可在代码中下断点单步调试。
+
 ## 4. 调用接口
 
-### 4.1 使用 curl（上传两个文本文件）
+### 4.1 使用 curl（直接提交字符串）
 
 ```bash
 curl -sS -X POST "http://127.0.0.1:8000/v1/contract-check" \
-  -F "regulation=@regulation.txt" \
-  -F "contract=@contract.txt" | jq .
+  -F "regulation=这里填写法规要求文本" \
+  -F "contract=这里填写合同内容文本" | jq .
 ```
 
 返回示例（字段与题目一致）：

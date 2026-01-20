@@ -1,41 +1,40 @@
+"""FastAPI 应用主模块 - 遵循 LangChain 最佳实践"""
+
 from __future__ import annotations
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
-from langchain_core.messages import HumanMessage, SystemMessage
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI, Form, HTTPException
+from fastapi.responses import JSONResponse
+from langchain_core.runnables import Runnable
+
+from app.config import load_environment
 from app.llm import build_checker_chain
 from app.schemas import ContractCheckResponse
 
-app = FastAPI(title="Contract Check API", version="0.1.0")
+# 应用级链实例 - 遵循最佳实践：链应该复用而不是每次请求都创建
+_checker_chain: Runnable | None = None
 
 
-SYSTEM_PROMPT = """你是一名严谨的合同合规审查助手。
-你的任务：根据“法规要求”逐条核对“合同内容”是否满足。
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    应用生命周期管理。
+    在应用启动时加载配置并初始化链，在关闭时清理资源。
+    """
+    # 启动时：加载环境变量并初始化链
+    global _checker_chain
+    load_environment()
+    _checker_chain = build_checker_chain()
+    yield
+    # 关闭时：清理资源（如果需要）
 
-判定规则：
-1) 仅当法规要求中的每一条都被合同内容明确满足时，才输出“合格”；否则输出“不合格”。
-2) 对于不合格：必须指出缺失/不明确之处（对应到具体条款点），并给出可执行的补充建议。
-3) 只输出结构化结果，不要输出多余字段，不要输出 Markdown。
-4) 不要编造合同中不存在的信息；如果合同未提供某字段/信息，视为不满足。
-"""
 
-
-async def _read_upload_text(f: UploadFile) -> str:
-    raw = await f.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail=f"Uploaded file '{f.filename}' is empty.")
-    try:
-        return raw.decode("utf-8").strip()
-    except UnicodeDecodeError:
-        # 宽松兜底：有些文本可能是 gbk
-        try:
-            return raw.decode("gbk").strip()
-        except UnicodeDecodeError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot decode '{f.filename}' as utf-8/gbk text.",
-            ) from e
+app = FastAPI(
+    title="Contract Check API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 
 @app.post(
@@ -44,39 +43,47 @@ async def _read_upload_text(f: UploadFile) -> str:
     response_model_by_alias=True,  # 输出中文字段：审查结果/审查过程/审查建议
 )
 async def contract_check(
-    regulation: UploadFile = File(..., description="法规要求文本文件"),
-    contract: UploadFile = File(..., description="合同内容文本文件"),
+    regulation: str = Form(..., description="法规要求文本"),
+    contract: str = Form(..., description="合同内容文本"),
 ):
-    regulation_text = await _read_upload_text(regulation)
-    contract_text = await _read_upload_text(contract)
+    regulation_text = regulation.strip()
+    contract_text = contract.strip()
 
-    chain = build_checker_chain()
-    user_prompt = f"""请按法规要求审查合同内容，并输出结构化结果。
+    if not regulation_text:
+        raise HTTPException(status_code=400, detail="regulation 不能为空")
+    if not contract_text:
+        raise HTTPException(status_code=400, detail="contract 不能为空")
 
-法规要求：
-{regulation_text}
-
-合同内容：
-{contract_text}
-"""
+    # 使用应用级链实例（在启动时已初始化）
+    if _checker_chain is None:
+        raise HTTPException(
+            status_code=500, detail="Chain not initialized. Please check application startup."
+        )
 
     try:
-        result = chain.invoke(
-            [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=user_prompt),
-            ]
+        # 使用 LangChain 标准接口调用链
+        # chain 会自动处理 prompt -> llm -> parser 的流程
+        result = _checker_chain.invoke(
+            {
+                "regulation": regulation_text,
+                "contract": contract_text,
+            }
         )
-        # with_structured_output 返回的通常是 Pydantic 对象
-        if isinstance(result, ContractCheckResponse):
-            return result
-        return ContractCheckResponse.model_validate(result)
+        # PydanticOutputParser 已经返回 ContractCheckResponse 对象
+        return result
+    except ValueError as e:
+        # PydanticOutputParser 解析失败
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to parse LLM response: {str(e)}",
+        ) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM contract-check failed: {type(e).__name__}: {e}") from e
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM contract-check failed: {type(e).__name__}: {e}",
+        ) from e
 
 
 @app.get("/healthz")
 def healthz():
     return JSONResponse({"ok": True})
-
-
