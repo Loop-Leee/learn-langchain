@@ -37,6 +37,7 @@ class ModelType(str, Enum):
     """模型类型枚举 - 策略模式"""
     DEEPSEEK = "deepseek"
     QWEN3 = "qwen3"
+    FARUI = "farui"  # 通义法睿 - 法律专用模型
     AUTO = "auto"  # 默认使用 DeepSeek
 
 
@@ -45,9 +46,10 @@ class LLMConfig:
     """LLM 配置类 - 使用不可变数据类确保配置一致性"""
 
     api_key: str
-    base_url: str
+    base_url: str | None  # 法睿模型不需要 base_url
     model: str
     temperature: float = 0.0
+    use_native_dashscope: bool = False  # 是否使用 DashScope 原生 SDK（法睿需要）
 
     @classmethod
     def from_deepseek_env(cls, temperature: float = 0.5) -> LLMConfig:
@@ -114,7 +116,41 @@ class LLMConfig:
         )
 
     @classmethod
-    def from_model_type(cls, model_type: str | ModelType = ModelType.AUTO, temperature: float = 0.5) -> LLMConfig:
+    def from_farui_env(cls, temperature: float = 0.2) -> LLMConfig:
+        """
+        从环境变量创建通义法睿配置（策略：Farui）。
+        
+        通义法睿是阿里云的法律专用模型，不支持 OpenAI 兼容接口，
+        必须使用 DashScope 原生 SDK 调用。
+        
+        Args:
+            temperature: 模型温度参数
+            
+        Returns:
+            LLMConfig 实例
+            
+        Raises:
+            RuntimeError: 如果缺少必需的 API key
+        """
+        api_key = os.getenv("FARUI_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN3_API_KEY")
+        model = os.getenv("FARUI_MODEL", "farui-plus")
+
+        if not api_key:
+            raise RuntimeError(
+                "Missing FARUI_API_KEY (or DASHSCOPE_API_KEY). "
+                "Please set it in environment variables or .env file."
+            )
+
+        return cls(
+            api_key=api_key,
+            base_url=None,  # 法睿不使用 base_url
+            model=model,
+            temperature=temperature,
+            use_native_dashscope=True,  # 标记使用原生 DashScope SDK
+        )
+
+    @classmethod
+    def from_model_type(cls, model_type: str | ModelType = ModelType.AUTO, temperature: float = 0.2) -> LLMConfig:
         """
         策略模式：根据模型类型从环境变量创建配置。
         
@@ -141,6 +177,7 @@ class LLMConfig:
         _strategy_map: dict[str, Callable[[float], LLMConfig]] = {
             ModelType.DEEPSEEK: cls.from_deepseek_env,
             ModelType.QWEN3: cls.from_qwen3_env,
+            ModelType.FARUI: cls.from_farui_env,
             ModelType.AUTO: cls.from_deepseek_env,  # 默认使用 DeepSeek
         }
         
