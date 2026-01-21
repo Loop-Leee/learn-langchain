@@ -87,3 +87,26 @@ async def contract_check(
 @app.get("/healthz")
 def healthz():
     return JSONResponse({"ok": True})
+
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    # 在导入 uvicorn 之前禁用 uvloop
+    os.environ["UVLOOP"] = "false"
+
+    # 检查是否在调试模式下运行
+    if "pydevd" in sys.modules:
+        print("Running in debug mode, forcing asyncio loop")
+
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=False,
+        workers=1,
+        loop="asyncio"  # 显式指定使用 asyncio 事件循环
+    )
