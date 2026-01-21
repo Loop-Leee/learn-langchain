@@ -12,9 +12,44 @@ cp example.env .env
 ```
 
 需要配置：
+- `MODEL_TYPE`: 模型类型（可选：`deepseek`，可选：`qwen3`）
 - `DEEPSEEK_API_KEY`: DeepSeek 的 API Key
 - `DEEPSEEK_BASE_URL`: DeepSeek OpenAI 兼容接口地址（默认已给）
 - `DEEPSEEK_MODEL`: 模型名（默认 `deepseek-chat`）
+
+### 切换到 Qwen3（通义千问）
+
+如需使用 Qwen3，在 `example.env` 中配置：
+- 'MODEL_TYPE': qwen3
+- `QWEN3_API_KEY`: Qwen3 的 API Key
+- `QWEN3_BASE_URL`: Qwen3 OpenAI 兼容接口地址（默认已给）
+- `QWEN3_MODEL`: 模型名（默认 `qwen-plus`，可选：`qwen-max`, `qwen-turbo` 等）
+
+在代码中使用（策略模式）：
+```python
+from app.llm import create_chat_model
+from app.config import ModelType, LLMConfig
+
+# 方式1：使用字符串（推荐）
+llm = create_chat_model(model_type="qwen3")
+
+# 方式2：使用枚举（类型安全）
+llm = create_chat_model(model_type=ModelType.QWEN3)
+
+# 方式3：使用策略模式的工厂方法
+config = LLMConfig.from_model_type("qwen3")
+llm = create_chat_model(config=config)
+
+# 方式4：直接使用具体策略方法
+config = LLMConfig.from_qwen3_env()
+llm = create_chat_model(config=config)
+
+# 切换到 DeepSeek（同样支持策略模式）
+llm = create_chat_model(model_type="deepseek")
+# 或
+config = LLMConfig.from_deepseek_env()
+llm = create_chat_model(config=config)
+```
 
 ## 2. 安装依赖（Conda 推荐）
 
@@ -35,7 +70,7 @@ python -m pip install --upgrade pip
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 调试模式（可打断点）
+### 调试模式（可以断点调试）
 - 安装调试依赖：`pip install debugpy`（或 `conda install debugpy`）
 - 启动附加调试端口（默认 5678）：
 

@@ -2,37 +2,62 @@
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
-from langchain_core.language_models import BaseChatModel
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 
-from app.config import LLMConfig
+from app.config import LLMConfig, ModelType
 from app.schemas import ContractCheckResponse
 
 
-def create_chat_model(config: Optional[LLMConfig] = None) -> BaseChatModel:
+def create_chat_model(
+    config: Optional[LLMConfig] = None, 
+    model_type: str | ModelType = ModelType.AUTO
+) -> BaseChatModel:
     """
-    创建 BaseChatModel 实例。
+    创建 ChatModel 实例。
     
     遵循 LangChain 最佳实践：
     - 使用抽象类型 BaseChatModel 而不是具体类型
     - 通过配置对象传递参数
     - 支持依赖注入以便测试
+    - 使用策略模式选择模型配置
     
     Args:
-        config: LLM 配置对象，如果为 None 则从环境变量创建
+        config: LLM 配置对象，如果为 None 则根据 model_type 从环境变量创建
+        model_type: 模型类型，可以是字符串或 ModelType 枚举，可选值：
+            - "auto" 或 ModelType.AUTO: 自动选择（默认使用 DeepSeek）
+            - "deepseek" 或 ModelType.DEEPSEEK: 使用 DeepSeek 配置
+            - "qwen3" 或 ModelType.QWEN3: 使用 Qwen3 配置
         
     Returns:
         BaseChatModel 实例（具体为 ChatOpenAI）
+        
+    Examples:
+        # 使用默认配置（DeepSeek）
+        llm = create_chat_model()
+        
+        # 切换到 Qwen3（使用字符串）
+        llm = create_chat_model(model_type="qwen3")
+        
+        # 切换到 Qwen3（使用枚举）
+        llm = create_chat_model(model_type=ModelType.QWEN3)
+        
+        # 使用自定义配置
+        config = LLMConfig.from_qwen3_env()
+        llm = create_chat_model(config=config)
     """
     if config is None:
-        config = LLMConfig.from_env()
+        # 使用策略模式创建配置
+        model_type = os.getenv("MODEL_TYPE", ModelType.DEEPSEEK.value) or ModelType.AUTO
+        config = LLMConfig.from_model_type(model_type)
 
-    # DeepSeek 提供 OpenAI 兼容接口；langchain-openai 可直接用 base_url + api_key
+    # DeepSeek 和 Qwen3 都提供 OpenAI 兼容接口；langchain-openai 可直接用 base_url + api_key
     return ChatOpenAI(
         model=config.model,
         api_key=config.api_key,
@@ -43,7 +68,7 @@ def create_chat_model(config: Optional[LLMConfig] = None) -> BaseChatModel:
 
 def build_checker_chain(llm: Optional[BaseChatModel] = None) -> Runnable:
     """
-    使用 LangChain 标准接口构建合同审查链。
+使用 LangChain 标准接口构建合同审查链。
     
     遵循 LangChain 最佳实践：
     - 使用 LCEL (LangChain Expression Language) 构建链
@@ -69,10 +94,10 @@ def build_checker_chain(llm: Optional[BaseChatModel] = None) -> Runnable:
 你的任务：根据"法规要求"逐条核对"合同内容"是否满足。
 
 判定规则：
-1) 仅当法规要求中的每一条都被合同内容明确满足时，才输出"合格"；否则输出"不合格"。
-2) 对于不合格：必须指出缺失/不明确之处（对应到具体条款点），并给出可执行的补充建议。
-3) 只输出结构化结果，不要输出多余字段，不要输出 Markdown。
-4) 不要编造合同中不存在的信息；如果合同未提供某字段/信息，视为不满足。
+1) 对于不合格：必须指出缺失/不明确之处（对应到具体条款点），并给出可执行的补充建议。
+2) 只输出结构化结果，不要输出多余字段，不要输出 Markdown。
+3) 不要编造合同中不存在的信息。
+4) 特别注意[最高优先级]/[特殊情况]等合规条件的特殊判断。
 
 {format_instructions}"""
 
