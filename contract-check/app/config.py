@@ -150,7 +150,7 @@ class LLMConfig:
         )
 
     @classmethod
-    def from_model_type(cls, model_type: str | ModelType = ModelType.AUTO, temperature: float = 0.2) -> LLMConfig:
+    def from_model_type(cls, model_type: str | ModelType = ModelType.AUTO, temperature: float | None = None) -> LLMConfig:
         """
         策略模式：根据模型类型从环境变量创建配置。
         
@@ -173,6 +173,15 @@ class LLMConfig:
             config = LLMConfig.from_model_type("qwen3")
             config = LLMConfig.from_model_type("deepseek")
         """
+        # 如果未提供 temperature，从环境变量读取
+        if temperature is None:
+            temp_str = os.getenv("MODEL_TEMPERATURE")
+            if temp_str is not None:
+                try:
+                    temperature = float(temp_str)
+                except ValueError:
+                    temperature = 0.2  # 如果环境变量值无效，继续使用默认值
+        
         # 策略映射表
         _strategy_map: dict[str, Callable[[float], LLMConfig]] = {
             ModelType.DEEPSEEK: cls.from_deepseek_env,

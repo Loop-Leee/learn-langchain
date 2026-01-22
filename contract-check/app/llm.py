@@ -269,6 +269,7 @@ def build_checker_chain(llm: Optional[BaseChatModel] = None) -> Runnable:
     """
     if llm is None:
         llm = create_chat_model()
+        print(f"已创建模型：{llm.model_name}, 温度：{llm.temperature}")
 
     # 使用 LangChain 的 PydanticOutputParser 来解析结构化输出
     output_parser = PydanticOutputParser(pydantic_object=ContractCheckResponse)
