@@ -14,3 +14,4 @@ dependencies:
     - langchain-openai==0.3.1
     - pydantic==2.10.4
     - dashscope>=1.20.0      # DashScope SDK - 用于调用通义法睿等不支持 OpenAI 兼容接口的模型
+    - openpyxl>=3.1.0
