@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
 from contextlib import asynccontextmanager
 from typing import List
 from urllib.parse import quote
@@ -187,10 +188,11 @@ async def contract_check_batch(
             detail="Excel 文件缺少「合同原文」列"
         )
     
-    # 查找或创建结果列
-    result_col_name = "审查结果"
-    process_col_name = "审查过程"
-    suggestion_col_name = "审查建议"
+    # 查找或创建结果列（result_col 带模型名，便于区分不同模型的输出）
+    model_type = (os.getenv("MODEL_TYPE") or "auto").strip().lower()
+    result_col_name = f"{model_type}审查结果"
+    process_col_name = f"{model_type}审查过程"
+    suggestion_col_name = f"{model_type}审查建议"
     
     def get_or_create_col(col_name: str) -> int:
         """获取列索引，如果不存在则创建新列"""
