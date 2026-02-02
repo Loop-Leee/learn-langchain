@@ -1,0 +1,12 @@
+# LangChain 核心库
+langchain>=0.1.0
+langchain-openai>=0.0.5
+# 或使用其他 LLM 提供者
+# langchain-anthropic>=0.1.0
+# langchain-community>=0.0.20
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# 其他工具库
+pydantic>=2.0.0
